@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Photo Coverage Analysis - Immich Albums</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .header {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        .nav {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .nav a {
+            padding: 0.5rem 1rem;
+            text-decoration: none;
+            color: #666;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .nav a:hover, .nav a.active {
+            background: #007bff;
+            color: white;
+        }
+        .content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        #map {
+            flex: 1;
+        }
+        #sidebar {
+            width: 350px;
+            background: white;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+        }
+        .legend {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid rgba(0,0,0,0.3);
+        }
+        .stats {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+        .stat-label {
+            font-weight: 600;
+        }
+        .filters {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .filter-item {
+            margin: 10px 0;
+        }
+        .filter-item label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .filter-item input[type="checkbox"] {
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Immich Albums - Coverage Analysis</h1>
+        <div class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/sessions">Sessions Map</a>
+            <a href="/heatmap">Activity Heatmap</a>
+            <a href="/homes">Home Locations</a>
+            <a href="/trips">Trips</a>
+            <a href="/coverage" class="active">Coverage Analysis</a>
+        </div>
+    </div>
+
+    <div class="content">
+        <div id="map"></div>
+        <div id="sidebar">
+            <h2 style="margin-top: 0; font-size: 18px;">Photo Coverage</h2>
+
+        <div class="legend">
+            <h3 style="margin-top: 0; font-size: 14px;">Session Types</h3>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #e74c3c;"></div>
+                <span>In Trips ({{.TripsCount}} sessions)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #3498db;"></div>
+                <span>At Home ({{.HomeCount}} sessions)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #f39c12;"></div>
+                <span>Away, Not in Trips ({{.OrphanCount}} sessions)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #95a5a6;"></div>
+                <span>Other Sessions ({{.OtherCount}} sessions)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #27ae60; opacity: 0.5;"></div>
+                <span>Home Locations ({{.HomesCount}})</span>
+            </div>
+        </div>
+
+        <div class="stats">
+            <h3 style="margin-top: 0; font-size: 14px;">Statistics</h3>
+            <div class="stat-row">
+                <span class="stat-label">Total Sessions:</span>
+                <span>{{.TotalSessions}}</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Photos in Trips:</span>
+                <span>{{.PhotosInTrips}} ({{.PhotosInTripsPercent}}%)</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Photos At Home:</span>
+                <span>{{.PhotosAtHome}} ({{.PhotosAtHomePercent}}%)</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Orphan Photos:</span>
+                <span>{{.OrphanPhotos}} ({{.OrphanPhotosPercent}}%)</span>
+            </div>
+        </div>
+
+        <div class="filters">
+            <h3 style="margin-top: 0; font-size: 14px;">Show/Hide</h3>
+            <div class="filter-item">
+                <label>
+                    <input type="checkbox" id="show-trips" checked>
+                    Trip Sessions & Routes
+                </label>
+            </div>
+            <div class="filter-item">
+                <label>
+                    <input type="checkbox" id="show-home" checked>
+                    Home Sessions
+                </label>
+            </div>
+            <div class="filter-item">
+                <label>
+                    <input type="checkbox" id="show-orphans" checked>
+                    Orphan Sessions (Away, Not in Trips)
+                </label>
+            </div>
+            <div class="filter-item">
+                <label>
+                    <input type="checkbox" id="show-other" checked>
+                    Other Sessions
+                </label>
+            </div>
+            <div class="filter-item">
+                <label>
+                    <input type="checkbox" id="show-home-locations" checked>
+                    Home Location Zones
+                </label>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([60.2, 25.0], 8);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Data from server
+        const sessions = {{.SessionsJSON}};
+        const trips = {{.TripsJSON}};
+        const homes = {{.HomesJSON}};
+
+        // Layer groups
+        const tripLayers = L.layerGroup().addTo(map);
+        const homeLayers = L.layerGroup().addTo(map);
+        const orphanLayers = L.layerGroup().addTo(map);
+        const otherLayers = L.layerGroup().addTo(map);
+        const homeLocationLayers = L.layerGroup().addTo(map);
+
+        // Create sets for quick lookup
+        const sessionIDsInTrips = new Set();
+        trips.forEach(trip => {
+            if (trip.sessions) {
+                trip.sessions.forEach(session => {
+                    sessionIDsInTrips.add(session.id);
+                });
+            }
+        });
+
+        // Categorize and display sessions
+        sessions.forEach(session => {
+            const isInTrip = sessionIDsInTrips.has(session.id);
+            const isAtHome = session.at_home;
+            const isAwayOrphan = !isInTrip && !isAtHome;
+
+            let color, layer, label;
+
+            if (isInTrip) {
+                color = '#e74c3c';
+                layer = tripLayers;
+                label = 'In Trip';
+            } else if (isAtHome) {
+                color = '#3498db';
+                layer = homeLayers;
+                label = 'At Home';
+            } else if (isAwayOrphan) {
+                color = '#f39c12';
+                layer = orphanLayers;
+                label = 'Away, Not in Trip';
+            } else {
+                color = '#95a5a6';
+                layer = otherLayers;
+                label = 'Other';
+            }
+
+            const marker = L.circleMarker([session.center_lat, session.center_lon], {
+                radius: 6,
+                fillColor: color,
+                color: 'white',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            });
+
+            marker.bindPopup(`
+                <b>${label}</b><br>
+                <b>Photographer:</b> ${session.photographer}<br>
+                <b>Photos:</b> ${session.asset_ids ? session.asset_ids.length : 0}<br>
+                <b>Time:</b> ${new Date(session.start_time).toLocaleString()}<br>
+                <b>Radius:</b> ${(session.radius / 1000).toFixed(2)} km
+            `);
+
+            marker.addTo(layer);
+        });
+
+        // Draw trip routes
+        const tripColors = [
+            '#e74c3c', '#8e44ad', '#2980b9', '#16a085', '#27ae60',
+            '#f39c12', '#d35400', '#c0392b', '#2c3e50', '#7f8c8d'
+        ];
+
+        trips.forEach((trip, index) => {
+            if (!trip.sessions || trip.sessions.length < 2) return;
+
+            const color = tripColors[index % tripColors.length];
+            const sortedSessions = trip.sessions.sort((a, b) =>
+                new Date(a.start_time) - new Date(b.start_time)
+            );
+
+            const points = sortedSessions.map(s => [s.center_lat, s.center_lon]);
+
+            const line = L.polyline(points, {
+                color: color,
+                weight: 3,
+                opacity: 0.6,
+                dashArray: '10, 10'
+            });
+
+            line.bindPopup(`<b>${trip.name}</b><br>${sortedSessions.length} sessions`);
+            line.addTo(tripLayers);
+        });
+
+        // Draw home locations
+        homes.forEach(home => {
+            const circle = L.circle([home.latitude, home.longitude], {
+                radius: home.radius * 1000,
+                color: '#27ae60',
+                fillColor: '#27ae60',
+                fillOpacity: 0.2,
+                weight: 2
+            });
+
+            circle.bindPopup(`<b>Home: ${home.name}</b><br>Radius: ${home.radius} km`);
+            circle.addTo(homeLocationLayers);
+
+            const marker = L.marker([home.latitude, home.longitude], {
+                icon: L.divIcon({
+                    className: 'home-marker',
+                    html: '<div style="background: #27ae60; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>',
+                    iconSize: [12, 12]
+                })
+            });
+            marker.addTo(homeLocationLayers);
+        });
+
+        // Filter controls
+        document.getElementById('show-trips').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(tripLayers);
+            } else {
+                map.removeLayer(tripLayers);
+            }
+        });
+
+        document.getElementById('show-home').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(homeLayers);
+            } else {
+                map.removeLayer(homeLayers);
+            }
+        });
+
+        document.getElementById('show-orphans').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(orphanLayers);
+            } else {
+                map.removeLayer(orphanLayers);
+            }
+        });
+
+        document.getElementById('show-other').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(otherLayers);
+            } else {
+                map.removeLayer(otherLayers);
+            }
+        });
+
+        document.getElementById('show-home-locations').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(homeLocationLayers);
+            } else {
+                map.removeLayer(homeLocationLayers);
+            }
+        });
+
+        // Auto-fit bounds
+        const allPoints = sessions.map(s => [s.center_lat, s.center_lon]);
+        if (allPoints.length > 0) {
+            map.fitBounds(allPoints);
+        }
+    </script>
+</body>
+</html>

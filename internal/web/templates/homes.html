@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Locations - Immich Albums</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .header {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        .nav {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .nav a {
+            padding: 0.5rem 1rem;
+            text-decoration: none;
+            color: #666;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .nav a:hover, .nav a.active {
+            background: #007bff;
+            color: white;
+        }
+        .content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+        .sidebar h2 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+        }
+        .add-form {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+        .btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .home-list {
+            list-style: none;
+        }
+        .home-item {
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .home-item .info .name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        .home-item .info .coords {
+            font-size: 0.75rem;
+            color: #666;
+        }
+        .home-item .delete {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        .home-item .delete:hover {
+            background: #c82333;
+        }
+        #map {
+            flex: 1;
+        }
+        .instructions {
+            background: #e3f2fd;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Immich Albums - Home Locations</h1>
+        <div class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/sessions">Sessions Map</a>
+            <a href="/heatmap">Activity Heatmap</a>
+            <a href="/homes" class="active">Home Locations</a>
+            <a href="/trips">Trips</a>
+            <a href="/coverage">Coverage Analysis</a>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="sidebar">
+            <div class="heatmap-toggle" style="margin-bottom: 1.5rem;">
+                <button class="btn btn-secondary" onclick="toggleHeatmap()" style="margin-bottom: 0.5rem;">
+                    <span id="heatmapToggleText">Show Activity Heatmap</span>
+                </button>
+                <p style="font-size: 0.8rem; color: #666; margin-top: 0.5rem;">
+                    The heatmap shows where you spend time. Use it to identify home locations.
+                </p>
+            </div>
+
+            <h2>Add Home Location</h2>
+            <div class="instructions">
+                Click anywhere on the map to set coordinates, then enter a name and radius. Home locations
+                help distinguish trips from daily activities.
+            </div>
+            <div class="add-form">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="name" placeholder="e.g., Home, Office, Parents' House" />
+                </div>
+                <div class="form-group">
+                    <label>Latitude</label>
+                    <input type="number" id="lat" step="0.000001" placeholder="Click map to set" />
+                </div>
+                <div class="form-group">
+                    <label>Longitude</label>
+                    <input type="number" id="lon" step="0.000001" placeholder="Click map to set" />
+                </div>
+                <div class="form-group">
+                    <label>Radius (km)</label>
+                    <input type="number" id="radius" step="0.1" value="2.0" />
+                </div>
+                <button class="btn" onclick="addHome()">Add Home Location</button>
+            </div>
+
+            <h2>Your Home Locations</h2>
+            <ul class="home-list"></ul>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        let homes = [];
+        let tempMarker = null;
+        let homeMarkers = [];
+        let heatmapVisible = false;
+        let heatmapCircles = [];
+
+        // Click on map to set location
+        map.on('click', function(e) {
+            document.getElementById('lat').value = e.latlng.lat.toFixed(6);
+            document.getElementById('lon').value = e.latlng.lng.toFixed(6);
+
+            // Show temporary marker
+            if (tempMarker) {
+                map.removeLayer(tempMarker);
+            }
+            tempMarker = L.marker(e.latlng).addTo(map);
+        });
+
+        // Load existing homes
+        loadHomes();
+
+        function loadHomes() {
+            fetch('/api/homes')
+                .then(res => res.json())
+                .then(data => {
+                    homes = data || [];
+                    renderHomes();
+                    if (homes.length > 0) {
+                        fitMapToHomes();
+                    }
+                });
+        }
+
+        function renderHomes() {
+            const list = document.querySelector('.home-list');
+            list.innerHTML = '';
+
+            // Clear existing markers
+            homeMarkers.forEach(marker => map.removeLayer(marker));
+            homeMarkers = [];
+
+            if (homes.length === 0) {
+                list.innerHTML = '<p style="color: #666; padding: 1rem;">No home locations yet</p>';
+                return;
+            }
+
+            homes.forEach(home => {
+                const item = document.createElement('li');
+                item.className = 'home-item';
+                item.innerHTML = `
+                    <div class="info">
+                        <div class="name">${home.name}</div>
+                        <div class="coords">${home.latitude.toFixed(4)}, ${home.longitude.toFixed(4)} (${home.radius}km)</div>
+                    </div>
+                    <button class="delete" onclick="deleteHome(${home.id})">Delete</button>
+                `;
+                list.appendChild(item);
+
+                // Add marker to map
+                const marker = L.marker([home.latitude, home.longitude], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).addTo(map);
+
+                marker.bindPopup(`<strong>${home.name}</strong><br>Radius: ${home.radius}km`);
+
+                // Add circle for radius
+                L.circle([home.latitude, home.longitude], {
+                    radius: home.radius * 1000,
+                    color: '#dc3545',
+                    fillColor: '#dc3545',
+                    fillOpacity: 0.1
+                }).addTo(map);
+
+                homeMarkers.push(marker);
+            });
+        }
+
+        function addHome() {
+            const name = document.getElementById('name').value;
+            const lat = parseFloat(document.getElementById('lat').value);
+            const lon = parseFloat(document.getElementById('lon').value);
+            const radius = parseFloat(document.getElementById('radius').value);
+
+            if (!name || !lat || !lon || !radius) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            fetch('/api/homes/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name,
+                    latitude: lat,
+                    longitude: lon,
+                    radius: radius
+                })
+            })
+            .then(res => res.json())
+            .then(() => {
+                // Clear form
+                document.getElementById('name').value = '';
+                document.getElementById('lat').value = '';
+                document.getElementById('lon').value = '';
+                document.getElementById('radius').value = '2.0';
+
+                if (tempMarker) {
+                    map.removeLayer(tempMarker);
+                    tempMarker = null;
+                }
+
+                // Reload homes
+                loadHomes();
+            })
+            .catch(err => alert('Error adding home: ' + err.message));
+        }
+
+        function deleteHome(id) {
+            if (!confirm('Delete this home location?')) return;
+
+            fetch('/api/homes/delete?id=' + id, { method: 'POST' })
+                .then(res => res.json())
+                .then(() => loadHomes())
+                .catch(err => alert('Error deleting home: ' + err.message));
+        }
+
+        function fitMapToHomes() {
+            if (homes.length === 0) return;
+
+            const bounds = L.latLngBounds(
+                homes.map(h => [h.latitude, h.longitude])
+            );
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }
+
+        async function toggleHeatmap() {
+            const toggleText = document.getElementById('heatmapToggleText');
+
+            if (heatmapVisible) {
+                // Hide heatmap
+                heatmapCircles.forEach(circle => map.removeLayer(circle));
+                heatmapCircles = [];
+                heatmapVisible = false;
+                toggleText.textContent = 'Show Activity Heatmap';
+            } else {
+                // Show heatmap
+                toggleText.textContent = 'Loading heatmap...';
+
+                try {
+                    const response = await fetch('/api/heatmap-data');
+                    const data = await response.json();
+
+                    if (!data || data.length === 0) {
+                        alert('No heatmap data available. Import assets first.');
+                        toggleText.textContent = 'Show Activity Heatmap';
+                        return;
+                    }
+
+                    // Find max intensity for normalization
+                    const maxIntensity = Math.max(...data.map(p => p.intensity));
+
+                    // Add circles for each point
+                    data.forEach(point => {
+                        const normalizedIntensity = point.intensity / maxIntensity;
+                        const radius = 100 + (normalizedIntensity * 400); // 100-500m radius
+                        const opacity = 0.2 + (normalizedIntensity * 0.4); // 0.2-0.6 opacity
+
+                        const circle = L.circle([point.lat, point.lon], {
+                            radius: radius,
+                            color: '#ff6b6b',
+                            fillColor: '#ff6b6b',
+                            fillOpacity: opacity,
+                            weight: 1
+                        }).addTo(map);
+
+                        circle.bindPopup(`Activity: ${point.intensity} photos`);
+                        heatmapCircles.push(circle);
+                    });
+
+                    heatmapVisible = true;
+                    toggleText.textContent = 'Hide Activity Heatmap';
+
+                    // Fit map to show both homes and heatmap
+                    if (data.length > 0) {
+                        const allPoints = data.map(p => [p.lat, p.lon]);
+                        if (homes.length > 0) {
+                            allPoints.push(...homes.map(h => [h.latitude, h.longitude]));
+                        }
+                        const bounds = L.latLngBounds(allPoints);
+                        map.fitBounds(bounds, { padding: [50, 50] });
+                    }
+                } catch (err) {
+                    console.error('Failed to load heatmap:', err);
+                    alert('Failed to load heatmap: ' + err.message);
+                    toggleText.textContent = 'Show Activity Heatmap';
+                }
+            }
+        }
+    </script>
+</body>
+</html>

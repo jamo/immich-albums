@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trips - Immich Albums</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .header {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        .nav {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .nav a {
+            padding: 0.5rem 1rem;
+            text-decoration: none;
+            color: #666;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .nav a:hover, .nav a.active {
+            background: #007bff;
+            color: white;
+        }
+        .content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+        .sidebar h2 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+        }
+        .trip-list {
+            list-style: none;
+        }
+        .trip-item {
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 4px solid transparent;
+        }
+        .trip-item:hover {
+            background: #e9ecef;
+        }
+        .trip-item.active {
+            background: #007bff;
+            color: white;
+            border-left-color: #0056b3;
+        }
+        .trip-item .title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .trip-name {
+            flex: 1;
+        }
+        .edit-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.2rem;
+            opacity: 0;
+            transition: opacity 0.2s;
+            font-size: 0.8rem;
+        }
+        .trip-item:hover .edit-btn {
+            opacity: 0.6;
+        }
+        .edit-btn:hover {
+            opacity: 1 !important;
+        }
+        .trip-item.active .edit-btn {
+            color: white;
+        }
+        .trip-name-input {
+            flex: 1;
+            padding: 0.3rem;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+        .trip-item .meta {
+            font-size: 0.8rem;
+            opacity: 0.85;
+            line-height: 1.4;
+        }
+        .trip-item .stats {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            display: flex;
+            gap: 1rem;
+            font-size: 0.75rem;
+        }
+        .trip-item.active .stats {
+            border-top-color: rgba(255,255,255,0.3);
+        }
+        .trip-item .badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            background: rgba(0,0,0,0.1);
+            border-radius: 3px;
+            font-size: 0.7rem;
+            margin-top: 0.25rem;
+        }
+        .trip-item.active .badge {
+            background: rgba(255,255,255,0.2);
+        }
+        #map {
+            flex: 1;
+        }
+        .loading {
+            padding: 2rem;
+            text-align: center;
+            color: #666;
+        }
+        .legend {
+            position: absolute;
+            bottom: 2rem;
+            right: 2rem;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-size: 0.875rem;
+        }
+        .legend h3 {
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+        .legend-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+        .trip-photos {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+            margin-top: 0.5rem;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .trip-photo {
+            aspect-ratio: 1;
+            overflow: hidden;
+            background: #ddd;
+        }
+        .trip-photo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .exclude-control {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+        }
+        .trip-item.active .exclude-control {
+            border-top-color: rgba(255,255,255,0.3);
+        }
+        .exclude-control input[type="checkbox"] {
+            cursor: pointer;
+        }
+        .exclude-control label {
+            cursor: pointer;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Immich Albums - Trips</h1>
+        <div class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/sessions">Sessions Map</a>
+            <a href="/heatmap">Activity Heatmap</a>
+            <a href="/homes">Home Locations</a>
+            <a href="/trips" class="active">Trips</a>
+            <a href="/coverage">Coverage Analysis</a>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="sidebar">
+            <h2>Detected Trips</h2>
+            <div class="loading">Loading trips...</div>
+            <ul class="trip-list" style="display: none;"></ul>
+        </div>
+        <div id="map"></div>
+        <div class="legend">
+            <h3>Legend</h3>
+            <div class="legend-item">
+                <div class="legend-icon" style="background: #dc3545;"></div>
+                <span>Home Locations</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-icon" style="background: #28a745;"></div>
+                <span>Trips</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        let trips = [];
+        let homes = [];
+        let tripMarkers = [];
+        let homeMarkers = [];
+        let routeLayers = {}; // Store route layers per trip
+        let sessionMarkers = {}; // Store session markers per trip
+
+        // Trip colors for different trips
+        const tripColors = [
+            '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+            '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788',
+            '#FF8FAB', '#00D9FF', '#FFD93D', '#6BCF7F', '#A8E6CF'
+        ];
+
+        // Load trips and homes
+        Promise.all([
+            fetch('/api/trips').then(res => res.json()),
+            fetch('/api/homes').then(res => res.json())
+        ]).then(([tripsData, homesData]) => {
+            trips = tripsData || [];
+            homes = homesData || [];
+
+            renderHomes();
+            renderTrips();
+
+            if (trips.length > 0) {
+                fitMapToData();
+            }
+        }).catch(err => {
+            document.querySelector('.loading').textContent = 'Error loading trips: ' + err.message;
+        });
+
+        function renderHomes() {
+            homes.forEach(home => {
+                const marker = L.marker([home.latitude, home.longitude], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).addTo(map);
+
+                marker.bindPopup(`<strong>${home.name}</strong><br>Home Location`);
+
+                // Add radius circle
+                L.circle([home.latitude, home.longitude], {
+                    radius: home.radius * 1000,
+                    color: '#dc3545',
+                    fillColor: '#dc3545',
+                    fillOpacity: 0.1
+                }).addTo(map);
+
+                homeMarkers.push(marker);
+            });
+        }
+
+        function renderTrips() {
+            const loading = document.querySelector('.loading');
+            const list = document.querySelector('.trip-list');
+
+            if (trips.length === 0) {
+                loading.textContent = 'No trips found. Run "detect-trips" first.';
+                return;
+            }
+
+            loading.style.display = 'none';
+            list.style.display = 'block';
+
+            trips.forEach((trip, index) => {
+                const startDate = new Date(trip.start_time);
+                const endDate = new Date(trip.end_time);
+                const duration = (endDate - startDate) / (1000 * 60 * 60); // hours
+
+                const item = document.createElement('li');
+                item.className = 'trip-item';
+
+                let durationStr = duration > 24
+                    ? `${(duration / 24).toFixed(1)} days`
+                    : `${duration.toFixed(1)} hours`;
+
+                const tripColor = tripColors[index % tripColors.length];
+
+                // Generate photo previews (up to 4 photos)
+                const samplePhotos = trip.asset_ids.slice(0, 4);
+                const photosHTML = samplePhotos.map(assetId => `
+                    <div class="trip-photo">
+                        <img src="/api/immich-proxy/api/assets/${assetId}/thumbnail?size=preview" alt="Trip photo">
+                    </div>
+                `).join('');
+
+                item.innerHTML = `
+                    <div class="title">
+                        <span style="display: inline-block; width: 12px; height: 12px; background: ${tripColor}; border-radius: 50%; margin-right: 8px;"></span>
+                        <span class="trip-name" data-trip-id="${trip.id}">${trip.name}</span>
+                        <button class="edit-btn" title="Edit trip name" data-trip-index="${index}">✏️</button>
+                    </div>
+                    <div class="meta">
+                        ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}<br>
+                        <span class="badge">${trip.photographers}</span>
+                    </div>
+                    ${photosHTML ? `<div class="trip-photos">${photosHTML}</div>` : ''}
+                    <div class="stats">
+                        <span>📸 ${trip.asset_ids.length} photos</span>
+                        <span>📍 ${trip.sessions ? trip.sessions.length : trip.session_count} stops</span>
+                    </div>
+                    <div class="stats">
+                        <span>⏱️ ${durationStr}</span>
+                        <span>🗺️ ${trip.total_distance.toFixed(0)}km travel</span>
+                    </div>
+                    <div class="exclude-control">
+                        <input type="checkbox" id="exclude-${trip.id}" ${trip.exclude_from_album ? 'checked' : ''}
+                               onchange="toggleExclude(${trip.id}, this.checked)">
+                        <label for="exclude-${trip.id}">Exclude from album creation</label>
+                    </div>
+                `;
+
+                // Add edit button click handler
+                const editBtn = item.querySelector('.edit-btn');
+                editBtn.onclick = (e) => {
+                    e.stopPropagation(); // Prevent selecting the trip
+                    editTripName(index, trip.id);
+                };
+
+                item.onclick = () => selectTrip(index);
+                list.appendChild(item);
+
+                // Create trip center marker (hidden by default, shown when not selected)
+                const marker = L.circleMarker([trip.center_lat, trip.center_lon], {
+                    radius: 8,
+                    fillColor: tripColor,
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map);
+
+                marker.bindPopup(`
+                    <strong>${trip.name}</strong><br>
+                    Duration: ${durationStr}<br>
+                    Photos: ${trip.asset_ids.length}<br>
+                    Sessions: ${trip.session_count}<br>
+                    Distance from home: ${trip.home_distance.toFixed(0)}km<br>
+                    Travel distance: ${trip.total_distance.toFixed(0)}km<br>
+                    Photographers: ${trip.photographers}
+                `);
+
+                marker.on('click', () => selectTrip(index));
+                tripMarkers.push(marker);
+
+                // Create route layers (hidden by default)
+                if (trip.sessions && trip.sessions.length > 0) {
+                    routeLayers[index] = createRouteForTrip(trip, index, tripColor);
+                }
+            });
+        }
+
+        function createRouteForTrip(trip, tripIndex, color) {
+            const layers = L.layerGroup();
+
+            // Sort sessions by start time
+            const sessions = [...trip.sessions].sort((a, b) =>
+                new Date(a.start_time) - new Date(b.start_time)
+            );
+
+            // Create markers for each session
+            sessionMarkers[tripIndex] = [];
+            sessions.forEach((session, idx) => {
+                const marker = L.circleMarker([session.center_lat, session.center_lon], {
+                    radius: 6,
+                    fillColor: color,
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.9
+                });
+
+                const startDate = new Date(session.start_time);
+                marker.bindPopup(`
+                    <strong>Stop ${idx + 1}</strong><br>
+                    ${startDate.toLocaleString()}<br>
+                    Photos: ${session.asset_ids.length}<br>
+                    Photographer: ${session.photographer}
+                `);
+
+                layers.addLayer(marker);
+                sessionMarkers[tripIndex].push(marker);
+            });
+
+            // Create lines connecting sessions
+            if (sessions.length > 1) {
+                const coordinates = sessions.map(s => [s.center_lat, s.center_lon]);
+                const polyline = L.polyline(coordinates, {
+                    color: color,
+                    weight: 3,
+                    opacity: 0.7,
+                    dashArray: '5, 10',
+                    lineJoin: 'round'
+                });
+                layers.addLayer(polyline);
+
+                // Add arrows to show direction
+                for (let i = 0; i < coordinates.length - 1; i++) {
+                    const arrowIcon = L.divIcon({
+                        className: 'arrow-icon',
+                        html: `<div style="color: ${color}; font-size: 16px; transform: rotate(${calculateBearing(coordinates[i], coordinates[i+1])}deg);">➤</div>`,
+                        iconSize: [20, 20]
+                    });
+
+                    const midLat = (coordinates[i][0] + coordinates[i+1][0]) / 2;
+                    const midLon = (coordinates[i][1] + coordinates[i+1][1]) / 2;
+
+                    const arrow = L.marker([midLat, midLon], { icon: arrowIcon });
+                    layers.addLayer(arrow);
+                }
+            }
+
+            return layers;
+        }
+
+        function calculateBearing(from, to) {
+            const lat1 = from[0] * Math.PI / 180;
+            const lat2 = to[0] * Math.PI / 180;
+            const deltaLon = (to[1] - from[1]) * Math.PI / 180;
+
+            const y = Math.sin(deltaLon) * Math.cos(lat2);
+            const x = Math.cos(lat1) * Math.sin(lat2) -
+                      Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon);
+
+            const bearing = Math.atan2(y, x) * 180 / Math.PI;
+            return (bearing + 360) % 360;
+        }
+
+        let currentlySelectedTrip = null;
+
+        function selectTrip(index) {
+            // If clicking the same trip, deselect it
+            if (currentlySelectedTrip === index) {
+                deselectAllTrips();
+                return;
+            }
+
+            // Update sidebar
+            document.querySelectorAll('.trip-item').forEach((item, i) => {
+                item.classList.toggle('active', i === index);
+            });
+
+            // Hide all route layers
+            Object.values(routeLayers).forEach(layer => {
+                if (map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
+            });
+
+            // Hide all trip center markers except the selected one
+            tripMarkers.forEach((marker, i) => {
+                if (i === index) {
+                    marker.setStyle({ opacity: 0, fillOpacity: 0 }); // Hide center marker
+                } else {
+                    marker.setStyle({ opacity: 0.3, fillOpacity: 0.3 }); // Dim others
+                }
+            });
+
+            // Show route for selected trip
+            if (routeLayers[index]) {
+                routeLayers[index].addTo(map);
+
+                // Fit map to route
+                const trip = trips[index];
+                if (trip.sessions && trip.sessions.length > 0) {
+                    const bounds = L.latLngBounds(
+                        trip.sessions.map(s => [s.center_lat, s.center_lon])
+                    );
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                }
+            }
+
+            currentlySelectedTrip = index;
+        }
+
+        function deselectAllTrips() {
+            // Clear sidebar selection
+            document.querySelectorAll('.trip-item').forEach(item => {
+                item.classList.remove('active');
+            });
+
+            // Remove all route layers
+            Object.values(routeLayers).forEach(layer => {
+                if (map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
+            });
+
+            // Show all trip center markers
+            tripMarkers.forEach(marker => {
+                marker.setStyle({ opacity: 1, fillOpacity: 0.8 });
+            });
+
+            currentlySelectedTrip = null;
+
+            // Fit to all data
+            fitMapToData();
+        }
+
+        function fitMapToData() {
+            const allPoints = [];
+
+            trips.forEach(t => allPoints.push([t.center_lat, t.center_lon]));
+            homes.forEach(h => allPoints.push([h.latitude, h.longitude]));
+
+            if (allPoints.length > 0) {
+                const bounds = L.latLngBounds(allPoints);
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
+
+        function editTripName(tripIndex, tripId) {
+            const trip = trips[tripIndex];
+            const tripNameSpan = document.querySelector(`.trip-name[data-trip-id="${tripId}"]`);
+            const currentName = tripNameSpan.textContent;
+
+            // Create input element
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = currentName;
+            input.className = 'trip-name-input';
+
+            // Replace span with input
+            tripNameSpan.replaceWith(input);
+            input.focus();
+            input.select();
+
+            // Save on Enter or blur
+            const saveName = async () => {
+                const newName = input.value.trim();
+
+                if (newName && newName !== currentName) {
+                    try {
+                        const response = await fetch('/api/trips/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: tripId, name: newName })
+                        });
+
+                        if (response.ok) {
+                            // Update the trip name in our data
+                            trips[tripIndex].name = newName;
+
+                            // Create new span with updated name
+                            const newSpan = document.createElement('span');
+                            newSpan.className = 'trip-name';
+                            newSpan.setAttribute('data-trip-id', tripId);
+                            newSpan.textContent = newName;
+                            input.replaceWith(newSpan);
+                        } else {
+                            alert('Failed to update trip name');
+                            // Revert
+                            const newSpan = document.createElement('span');
+                            newSpan.className = 'trip-name';
+                            newSpan.setAttribute('data-trip-id', tripId);
+                            newSpan.textContent = currentName;
+                            input.replaceWith(newSpan);
+                        }
+                    } catch (err) {
+                        alert('Error updating trip name: ' + err.message);
+                        // Revert
+                        const newSpan = document.createElement('span');
+                        newSpan.className = 'trip-name';
+                        newSpan.setAttribute('data-trip-id', tripId);
+                        newSpan.textContent = currentName;
+                        input.replaceWith(newSpan);
+                    }
+                } else {
+                    // Revert if empty or unchanged
+                    const newSpan = document.createElement('span');
+                    newSpan.className = 'trip-name';
+                    newSpan.setAttribute('data-trip-id', tripId);
+                    newSpan.textContent = currentName;
+                    input.replaceWith(newSpan);
+                }
+            };
+
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    saveName();
+                }
+            });
+
+            input.addEventListener('blur', saveName);
+
+            // Prevent trip selection when clicking input
+            input.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
+
+        async function toggleExclude(tripId, exclude) {
+            try {
+                const response = await fetch('/api/trips/exclude', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: tripId, exclude_from_album: exclude })
+                });
+
+                if (!response.ok) {
+                    alert('Failed to update trip exclusion status');
+                    // Revert checkbox
+                    document.getElementById(`exclude-${tripId}`).checked = !exclude;
+                }
+            } catch (err) {
+                console.error('Error updating trip:', err);
+                alert('Error updating trip: ' + err.message);
+                // Revert checkbox
+                document.getElementById(`exclude-${tripId}`).checked = !exclude;
+            }
+        }
+
+        // Prevent checkbox clicks from selecting the trip
+        document.addEventListener('click', function(e) {
+            if (e.target.type === 'checkbox' && e.target.id.startsWith('exclude-')) {
+                e.stopPropagation();
+            }
+        });
+    </script>
+</body>
+</html>
